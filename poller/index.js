@@ -131,6 +131,17 @@ async function processTheatreWatch(rows, index, acc) {
                 continue;
             }
 
+            // A Cloudflare block means the check is inconclusive — record
+            // it as blocked (NOT "not listed") so we don't falsely report
+            // absence, and so a later poll re-checks it.
+            if (res.blocked) {
+                log(`  ! ${movie} @ ${code} ${date.display}: blocked, couldn't check`);
+                acc.checks.push({
+                    movie, theatre: code, date: date.display, blocked: true
+                });
+                continue;
+            }
+
             // Record every check (theatre name resolved from the page,
             // even when the movie isn't listed) so the heartbeat can
             // show end-to-end that theatre fetching works.
@@ -216,7 +227,9 @@ async function maybeHeartbeat(acc) {
         lines.push("", "<b>Theatre checks:</b>");
         for (const c of acc.checks) {
             const head = `• ${esc(c.movie)} @ ${esc(c.theatre)} — ${esc(c.date)}: `;
-            if (c.error) {
+            if (c.blocked) {
+                lines.push(head + "🚧 blocked (couldn't check, will retry)");
+            } else if (c.error) {
                 lines.push(head + "⚠️ fetch error");
             } else if (c.found) {
                 const t = c.times && c.times.length
@@ -228,9 +241,12 @@ async function maybeHeartbeat(acc) {
         }
     }
 
+    const blockedCount = acc.checks.filter(c => c.blocked).length;
     lines.push("", acc.found
         ? "🎟️ Something is OPEN — see the alert(s) above."
-        : "Nothing released at your theatres yet.");
+        : blockedCount
+            ? `Nothing released yet (${blockedCount} check(s) blocked — will retry next poll).`
+            : "Nothing released at your theatres yet.");
 
     const msg = lines.join("\n");
 

@@ -305,7 +305,10 @@ async function scrapeMovie(url, wantedLanguage = "") {
  * no times — so we anchor on a region-prefixed ET link WITH show times.
  *
  * Returns:
- *   { url, theatreName, playing: bool, times: [ "11:00 AM", ... ] }
+ *   { url, theatreName, blocked, playing: bool, times: [ "11:00 AM", ... ] }
+ *
+ * `blocked: true` means Cloudflare served a block/challenge page, so the
+ * result is inconclusive — the caller must NOT treat it as "not listed".
  */
 async function scrapeCinema(city, code, dateYmd, targetEt) {
 
@@ -326,14 +329,53 @@ async function scrapeCinema(city, code, dateYmd, targetEt) {
 
         logger.info(`Cinema ${code} ${dateYmd}: ${url}`);
 
-        await retry(async () => {
-            await page.goto(url, {
-                waitUntil: "domcontentloaded",
-                timeout: 60000
-            });
-        });
+        // Cloudflare intermittently serves a block/challenge page instead
+        // of the cinema listing. Detect it and re-load with backoff; a
+        // blocked page has no listings and must not be read as "not listed".
+        const maxAttempts = 3;
+        let blocked = false;
 
-        await page.waitForTimeout(2500);
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+
+            await retry(async () => {
+                await page.goto(url, {
+                    waitUntil: "domcontentloaded",
+                    timeout: 60000
+                });
+            });
+
+            await page.waitForTimeout(2500);
+
+            blocked = await page.evaluate(() => {
+                const t = (
+                    (document.title || "") + " " +
+                    (document.body ? document.body.innerText.slice(0, 800) : "")
+                ).toLowerCase();
+                return /you have been blocked|attention required|unable to access|just a moment|checking your browser|cf-error/
+                    .test(t);
+            });
+
+            if (!blocked) break;
+
+            logger.warn(
+                `Cinema ${code} ${dateYmd}: blocked ` +
+                `(attempt ${attempt}/${maxAttempts})`
+            );
+            if (attempt < maxAttempts) {
+                await page.waitForTimeout(3000 * attempt);
+            }
+        }
+
+        if (blocked) {
+            logger.error(`Cinema ${code} ${dateYmd}: blocked by Cloudflare`);
+            return {
+                url: page.url(),
+                theatreName: null,
+                blocked: true,
+                playing: false,
+                times: []
+            };
+        }
 
         const finalUrl = page.url();
 
@@ -397,6 +439,7 @@ async function scrapeCinema(city, code, dateYmd, targetEt) {
         return {
             url: finalUrl,
             theatreName,
+            blocked: false,
             playing: info.playing,
             times: info.times || []
         };
