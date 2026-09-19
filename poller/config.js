@@ -47,6 +47,13 @@ module.exports = {
         Number(process.env.POLL_INTERVAL_MINUTES || 10),
 
     // Timezone label used for the human-readable timestamp.
-    DISPLAY_TIMEZONE: process.env.DISPLAY_TIMEZONE || "Asia/Kolkata"
+    DISPLAY_TIMEZONE: process.env.DISPLAY_TIMEZONE || "Asia/Kolkata",
+
+    // Notify on EVERY poll while a movie is open/available, instead of
+    // only on the FALSE→TRUE transition. Also bypasses the per-row
+    // notifyCount cap and autoDisable. Expect ~one message per poll
+    // per open movie (e.g. every 10 min) until you disable the row.
+    NOTIFY_EVERY_TIME:
+        String(process.env.NOTIFY_EVERY_TIME || "").toLowerCase() === "true"
 
 };

@@ -36,6 +36,7 @@ jobs:
       - name: Run one poll
         env:
           POLL_ONCE: "true"
+          NOTIFY_EVERY_TIME: "true"
           SHEET_ID: ${{ secrets.SHEET_ID }}
           SHEET_RANGE: "A1:X50"
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}

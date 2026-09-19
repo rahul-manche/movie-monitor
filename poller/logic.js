@@ -79,16 +79,17 @@ function decideNotification(row, result) {
     const newOpen = !!result.booking.open;
     const newAvail = !!result.wantedLanguage.available;
 
-    // Respect the per-row notify cap.
-    if (cap > 0 && notified >= cap) {
+    // Respect the per-row notify cap — unless NOTIFY_EVERY_TIME is on.
+    if (!config.NOTIFY_EVERY_TIME && cap > 0 && notified >= cap) {
         return { notify: false, reason: "cap reached" };
     }
 
-    // Language-availability transition takes priority when watched.
+    // Language-availability takes priority when watched. Fire on every
+    // poll while available (NOTIFY_EVERY_TIME) or on the FALSE→TRUE edge.
     if (notifyLanguage && result.wantedLanguage.name) {
         const was = prevOpen && prevAvail;
         const now = newOpen && newAvail;
-        if (now && !was) {
+        if (now && (config.NOTIFY_EVERY_TIME || !was)) {
             return {
                 notify: true,
                 reason: "language available"
@@ -96,8 +97,8 @@ function decideNotification(row, result) {
         }
     }
 
-    // Booking-open transition.
-    if (notifyBookingOpen && newOpen && !prevOpen) {
+    // Booking-open: every poll while open (NOTIFY_EVERY_TIME) or the edge.
+    if (notifyBookingOpen && newOpen && (config.NOTIFY_EVERY_TIME || !prevOpen)) {
         return { notify: true, reason: "booking opened" };
     }
 
@@ -179,7 +180,8 @@ function computeRow(row, result, { error = null } = {}) {
 
     const notified = prevNotified + (notify ? 1 : 0);
     const hitCap = cap > 0 && notified >= cap;
-    const autoDisable = hitCap && isTrue(cell(row, COL.autoDisable));
+    const autoDisable =
+        !config.NOTIFY_EVERY_TIME && hitCap && isTrue(cell(row, COL.autoDisable));
 
     // Preserve prior values for cells we don't recompute this run.
     const lastChanged = changed
