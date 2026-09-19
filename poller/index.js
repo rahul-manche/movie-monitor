@@ -29,6 +29,13 @@ function log(...args) {
     console.log(new Date().toISOString(), ...args);
 }
 
+// Escape for Telegram HTML parse mode (heartbeat lines carry movie /
+// theatre names that may contain & < >).
+function esc(s) {
+    return String(s || "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 async function processRow(rows, index) {
 
     // Sheet row number is 1-based; rows[0] is the header.
@@ -79,13 +86,13 @@ async function processRow(rows, index) {
 }
 
 /**
- * Theatre-watch: for a row with watchTheatres (Z) + watchDates (AA),
+ * Theatre-watch: for a row with watchTheatres (W) + watchDates (X),
  * check each theatre×date on the cinema page for this row's movie
  * (matched by its ET code). On a hit, send one Telegram per theatre
  * with theatre name + show times + a direct booking link, throttled
- * per-(theatre,date) via the row's notifyEveryMinutes (Y).
+ * per-(theatre,date) via the row's notifyEveryMinutes (V).
  *
- * `acc` accumulates counts for the heartbeat.
+ * `acc` accumulates per-check detail for the heartbeat.
  */
 async function processTheatreWatch(rows, index, acc) {
 
@@ -111,8 +118,6 @@ async function processTheatreWatch(rows, index, acc) {
     for (const code of codes) {
         for (const date of dates) {
 
-            acc.theatreChecks++;
-
             let res;
             try {
                 res = await scrapeCinema(
@@ -120,8 +125,22 @@ async function processTheatreWatch(rows, index, acc) {
                 );
             } catch (err) {
                 log(`  ! ${movie} @ ${code} ${date.display}: ${err.message}`);
+                acc.checks.push({
+                    movie, theatre: code, date: date.display, error: true
+                });
                 continue;
             }
+
+            // Record every check (theatre name resolved from the page,
+            // even when the movie isn't listed) so the heartbeat can
+            // show end-to-end that theatre fetching works.
+            acc.checks.push({
+                movie,
+                theatre: res.theatreName,
+                date: date.display,
+                found: res.playing,
+                times: res.times
+            });
 
             if (!res.playing) {
                 log(`  · ${movie} @ ${code} ${date.display}: not listed yet`);
@@ -186,15 +205,34 @@ async function maybeHeartbeat(acc) {
         hour: "2-digit", minute: "2-digit", hour12: false
     }).format(new Date());
 
-    const status = acc.found
-        ? "🎟️ Something is OPEN — see the alert(s) above."
-        : "Nothing released at your theatres yet.";
+    const lines = [
+        `✅ <b>Monitor alive</b> — ${when} IST`,
+        `Read sheet ✓ · opened BMS ✓ · ${acc.movies} movie(s) checked.`
+    ];
 
-    const msg =
-        `✅ <b>Monitor alive</b> — ${when} IST\n` +
-        `Read sheet ✓ · opened BMS ✓ · checked ${acc.movies} movie(s)` +
-        (acc.theatreChecks ? ` and ${acc.theatreChecks} theatre-date(s)` : "") +
-        `.\n${status}`;
+    // Per-check breakdown so you can see theatre fetching end-to-end:
+    // "<movie> @ <resolved theatre name> — <date>: <status>".
+    if (acc.checks.length) {
+        lines.push("", "<b>Theatre checks:</b>");
+        for (const c of acc.checks) {
+            const head = `• ${esc(c.movie)} @ ${esc(c.theatre)} — ${esc(c.date)}: `;
+            if (c.error) {
+                lines.push(head + "⚠️ fetch error");
+            } else if (c.found) {
+                const t = c.times && c.times.length
+                    ? ` (${c.times.map(esc).join(", ")})` : "";
+                lines.push(head + `🎟️ OPEN${t}`);
+            } else {
+                lines.push(head + "not listed yet");
+            }
+        }
+    }
+
+    lines.push("", acc.found
+        ? "🎟️ Something is OPEN — see the alert(s) above."
+        : "Nothing released at your theatres yet.");
+
+    const msg = lines.join("\n");
 
     try {
         await sendMessage(msg);
@@ -217,7 +255,7 @@ async function pollOnce() {
         return;
     }
 
-    const acc = { movies: 0, theatreChecks: 0, found: false };
+    const acc = { movies: 0, checks: [], found: false };
 
     // Process entries (skip header row 0) sequentially: they
     // share one Firefox instance.
