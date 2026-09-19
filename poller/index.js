@@ -152,7 +152,7 @@ async function processTheatreWatch(rows, index, acc) {
 
     if (changed) {
         try {
-            await writeCell(`AB${rowNumber}`, JSON.stringify(state));
+            await writeCell(`Y${rowNumber}`, JSON.stringify(state));
         } catch (err) {
             log(`  ! ${movie}: theatreState write failed — ${err.message}`);
         }

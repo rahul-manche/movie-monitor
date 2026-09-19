@@ -19,13 +19,13 @@ if (!process.env.GOOGLE_KEY_FILE && !process.env.GOOGLE_CREDENTIALS_JSON) {
 
 module.exports = {
 
-    // Google Sheet holding the watch-list (columns A..X).
+    // Google Sheet holding the watch-list (columns A..Y).
     SHEET_ID: required("SHEET_ID"),
 
     // Range to read each poll. Rows 2+ are watch-list entries.
-    // Column Y  = per-row notifyEveryMinutes override.
-    // Columns Z/AA = theatre-watch inputs; AB = theatre-watch state.
-    SHEET_RANGE: process.env.SHEET_RANGE || "A1:AB50",
+    // Column V  = per-row notifyEveryMinutes override.
+    // Columns W/X = theatre-watch inputs; Y = theatre-watch state.
+    SHEET_RANGE: process.env.SHEET_RANGE || "A1:Y50",
 
     // Google service-account credentials. Provide EITHER:
     //  - GOOGLE_KEY_FILE: path to the JSON key file (server/VM), or

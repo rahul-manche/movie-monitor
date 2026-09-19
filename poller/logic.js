@@ -4,36 +4,33 @@
 
 const config = require("./config");
 
-// 0-based column indices for the A..X schema.
+// 0-based column indices for the A..Y schema.
 const COL = {
-    enabled: 0,           // A
-    movie: 1,             // B
-    city: 2,              // C
-    url: 3,               // D
-    wantedLanguage: 4,    // E
-    notifyBookingOpen: 5, // F
-    notifyLanguage: 6,    // G
-    notifyCount: 7,       // H
-    autoDisable: 8,       // I
-    priority: 9,          // J
-    remarks: 10,          // K
-    bookingOpen: 11,      // L
-    available: 12,        // M
-    stateHash: 13,        // N
-    event: 14,            // O
-    runCount: 15,         // P
-    notified: 16,         // Q
-    lastChecked: 17,      // R
-    lastCheckedDisplay: 18, // S
-    lastChanged: 19,      // T
-    lastNotification: 20, // U
-    lastMessage: 21,      // V
-    lastError: 22,        // W
-    wantedTheatres: 23,   // X
-    notifyEveryMinutes: 24, // Y  (input: min minutes between repeat alerts)
-    watchTheatres: 25,    // Z   (input: theatre codes/URLs to watch, comma-sep)
-    watchDates: 26,       // AA  (input: dates to watch, comma-sep)
-    theatreState: 27      // AB  (state: JSON {"CODE|YYYYMMDD": lastNotifiedISO})
+    enabled: 0,            // A
+    movie: 1,              // B
+    city: 2,               // C
+    url: 3,                // D
+    wantedLanguage: 4,     // E
+    notifyBookingOpen: 5,  // F
+    notifyLanguage: 6,     // G
+    notifyCount: 7,        // H
+    autoDisable: 8,        // I
+    bookingOpen: 9,        // J
+    available: 10,         // K
+    stateHash: 11,         // L
+    event: 12,             // M
+    runCount: 13,          // N
+    notified: 14,          // O
+    lastChecked: 15,       // P
+    lastCheckedDisplay: 16, // Q
+    lastChanged: 17,       // R
+    lastNotification: 18,  // S
+    lastMessage: 19,       // T
+    lastError: 20,         // U
+    notifyEveryMinutes: 21, // V  (input: min minutes between repeat alerts)
+    watchTheatres: 22,     // W   (input: theatre codes/URLs to watch, comma-sep)
+    watchDates: 23,        // X   (input: dates to watch, comma-sep)
+    theatreState: 24       // Y   (state: JSON {"CODE|YYYYMMDD": lastNotifiedISO})
 };
 
 const isTrue = v => String(v || "").trim().toUpperCase() === "TRUE";
@@ -135,7 +132,6 @@ function buildMessage(row, result, reason) {
     const movie = cell(row, COL.movie) || result.movie.title;
     const city = cell(row, COL.city);
     const url = cell(row, COL.url);
-    const theatres = cell(row, COL.wantedTheatres);
     const lang = result.wantedLanguage.name;
 
     const lines = [];
@@ -150,10 +146,6 @@ function buildMessage(row, result, reason) {
         lines.push(`📍 ${escapeHtml(city)}`);
     }
 
-    if (theatres) {
-        lines.push(`🎦 Your theatres to check: ${escapeHtml(theatres)}`);
-    }
-
     if (url) {
         lines.push(`🔗 <a href="${escapeHtml(url)}">Book now</a>`);
     }
@@ -163,11 +155,11 @@ function buildMessage(row, result, reason) {
 
 /**
  * Given the previous row and a fresh scrape result, compute the
- * new L..W state columns and whether/what to notify.
+ * new J..U state columns and whether/what to notify.
  *
  * Returns:
  *   {
- *     stateValues: [12 cells for L..W],
+ *     stateValues: [12 cells for J..U],
  *     notify, reason, message,
  *     hitCap, autoDisable   // for the enabled flag
  *   }
@@ -226,20 +218,20 @@ function computeRow(row, result, { error = null } = {}) {
                 ? `Booking OPEN (${reason})`
                 : "Booking not open"));
 
-    // L..W in order.
+    // J..U in order.
     const stateValues = [
-        open ? "TRUE" : "FALSE",                 // L bookingOpen
-        available ? "TRUE" : "FALSE",            // M available
-        newHash,                                 // N stateHash
-        event,                                   // O event
-        prevRunCount + 1,                        // P runCount
-        notified,                                // Q notified
-        now.toISOString(),                       // R lastChecked
-        displayTime(now),                        // S lastCheckedDisplay
-        lastChanged,                             // T lastChanged
-        lastNotification,                        // U lastNotification
-        lastMessage,                             // V lastMessage
-        error ? error.slice(0, 300) : ""         // W lastError
+        open ? "TRUE" : "FALSE",                 // J bookingOpen
+        available ? "TRUE" : "FALSE",            // K available
+        newHash,                                 // L stateHash
+        event,                                   // M event
+        prevRunCount + 1,                        // N runCount
+        notified,                                // O notified
+        now.toISOString(),                       // P lastChecked
+        displayTime(now),                        // Q lastCheckedDisplay
+        lastChanged,                             // R lastChanged
+        lastNotification,                        // S lastNotification
+        lastMessage,                             // T lastMessage
+        error ? error.slice(0, 300) : ""         // U lastError
     ];
 
     return {

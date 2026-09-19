@@ -55,8 +55,8 @@ async function readWatchlist() {
 }
 
 /**
- * Write the computed state columns L..W for a single row.
- * `values` is a 12-element array matching L,M,N,O,P,Q,R,S,T,U,V,W.
+ * Write the computed state columns J..U for a single row.
+ * `values` is a 12-element array matching J,K,L,M,N,O,P,Q,R,S,T,U.
  * rowNumber is 1-based (sheet row, e.g. 2 for the first entry).
  */
 async function writeRowState(rowNumber, values) {
@@ -65,7 +65,7 @@ async function writeRowState(rowNumber, values) {
 
     await sheets.spreadsheets.values.update({
         spreadsheetId: config.SHEET_ID,
-        range: `L${rowNumber}:W${rowNumber}`,
+        range: `J${rowNumber}:U${rowNumber}`,
         valueInputOption: "RAW",
         requestBody: {
             values: [values]
