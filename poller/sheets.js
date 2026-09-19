@@ -91,8 +91,45 @@ async function setEnabled(rowNumber, enabled) {
     });
 }
 
+/**
+ * Read a single cell (A1 notation, e.g. "AD1"). Returns "" if empty.
+ * Used for out-of-watchlist scratch cells (e.g. the heartbeat clock).
+ */
+async function readCell(a1) {
+
+    const sheets = await getClient();
+
+    const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: config.SHEET_ID,
+        range: a1
+    });
+
+    const v = res.data.values;
+    return v && v[0] && v[0][0] !== undefined ? v[0][0] : "";
+}
+
+/**
+ * Write a single cell (A1 notation). Used for the per-row theatre-watch
+ * state (e.g. "AB2") and the heartbeat clock (e.g. "AD1").
+ */
+async function writeCell(a1, value) {
+
+    const sheets = await getClient();
+
+    await sheets.spreadsheets.values.update({
+        spreadsheetId: config.SHEET_ID,
+        range: a1,
+        valueInputOption: "RAW",
+        requestBody: {
+            values: [[value]]
+        }
+    });
+}
+
 module.exports = {
     readWatchlist,
     writeRowState,
-    setEnabled
+    setEnabled,
+    readCell,
+    writeCell
 };

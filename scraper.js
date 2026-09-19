@@ -293,6 +293,140 @@ async function scrapeMovie(url, wantedLanguage = "") {
 
 }
 
+/**
+ * Scrape a BookMyShow CINEMA page to see whether a specific movie
+ * (identified by its ET code) is playing at that theatre on a date,
+ * and if so, at what show times.
+ *
+ * The cinema page is server-rendered and NOT Cloudflare-blocked (unlike
+ * the movie->showtimes API). Scheduled movies are linked with a
+ * REGION-PREFIXED path (/movies/HYD/<slug>/ET...) and carry time pills;
+ * sidebar "now showing" recommendations are not region-prefixed and have
+ * no times — so we anchor on a region-prefixed ET link WITH show times.
+ *
+ * Returns:
+ *   { url, theatreName, playing: bool, times: [ "11:00 AM", ... ] }
+ */
+async function scrapeCinema(city, code, dateYmd, targetEt) {
+
+    const browser = await getBrowser();
+
+    const page = await browser.newPage({
+        viewport: { width: 1366, height: 900 }
+    });
+
+    page.setDefaultTimeout(15000);
+
+    // Placeholder slug ("x"); BMS resolves the real one from the code.
+    const url =
+        `https://in.bookmyshow.com/cinemas/${city}/x/buytickets/` +
+        `${code}/${dateYmd}`;
+
+    try {
+
+        logger.info(`Cinema ${code} ${dateYmd}: ${url}`);
+
+        await retry(async () => {
+            await page.goto(url, {
+                waitUntil: "domcontentloaded",
+                timeout: 60000
+            });
+        });
+
+        await page.waitForTimeout(2500);
+
+        const finalUrl = page.url();
+
+        // The resolved URL slug is the theatre, e.g.
+        // /cinemas/HYD/sandhya-70mm-4k-dolby-atmos-rtc-x-roads/buytickets/...
+        // Prettify it; fall back to the page H1, then the raw code.
+        let theatreName = code;
+        const slug = finalUrl.match(/\/cinemas\/[^/]+\/([^/]+)\/buytickets\//)?.[1];
+        if (slug && slug !== "x") {
+            theatreName = slug
+                .split("-")
+                .map(w => w ? w[0].toUpperCase() + w.slice(1) : w)
+                .join(" ");
+        } else {
+            try {
+                const h1 = (await page.locator("h1").first().innerText()).trim();
+                if (h1) theatreName = h1;
+            }
+            catch (_) { /* fall back to the code */ }
+        }
+
+        const info = await page.evaluate((ET) => {
+
+            // Scheduled movies use a region-prefixed link like
+            // /movies/HYD/<slug>/ET... (uppercase region segment).
+            const anchors = [...document.querySelectorAll("a[href]")]
+                .filter(a => {
+                    const h = a.getAttribute("href") || "";
+                    const m = h.match(/^\/movies\/([A-Za-z]{2,})\/[^/]+\/(ET\d+)/);
+                    return m && m[1] === m[1].toUpperCase() && m[2] === ET;
+                });
+
+            if (!anchors.length) return { playing: false, times: [] };
+
+            // Walk up to the movie's row/card and collect its time pills.
+            let node = anchors[0];
+            for (let i = 0; i < 6 && node.parentElement; i++) {
+                node = node.parentElement;
+            }
+
+            const times = [...node.querySelectorAll("a,div,span,button")]
+                .map(e => (e.textContent || "").trim())
+                .filter(t => /^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(t));
+
+            // A real schedule block has time pills; a bare link (rare
+            // region-prefixed rec) does not, so require at least one.
+            return { playing: times.length > 0, times: [...new Set(times)] };
+
+        }, targetEt);
+
+        if (info.playing) {
+            logger.info(
+                `Cinema ${code} ${dateYmd}: ${targetEt} playing ` +
+                `(${info.times.join(", ")})`
+            );
+        }
+        else {
+            logger.info(`Cinema ${code} ${dateYmd}: ${targetEt} not listed`);
+        }
+
+        return {
+            url: finalUrl,
+            theatreName,
+            playing: info.playing,
+            times: info.times || []
+        };
+
+    }
+    catch (err) {
+
+        logger.error(`Cinema ${code} ${dateYmd} failed: ${err.message}`);
+
+        if (
+            err.message.includes("Target page") ||
+            err.message.includes("Browser has been closed") ||
+            err.message.includes("Connection closed") ||
+            err.message.includes("NS_ERROR")
+        ) {
+            logger.warn("Restarting Firefox...");
+            await restartBrowser();
+        }
+
+        throw err;
+
+    }
+    finally {
+        try { await page.close(); }
+        catch (_) { logger.warn("Unable to close cinema page."); }
+    }
+
+}
+
 module.exports = {
-    scrapeMovie
+    scrapeMovie,
+    scrapeCinema
 };

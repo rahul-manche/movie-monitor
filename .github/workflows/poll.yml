@@ -38,7 +38,7 @@ jobs:
         env:
           POLL_ONCE: "true"
           SHEET_ID: ${{ secrets.SHEET_ID }}
-          SHEET_RANGE: "A1:Y50"
+          SHEET_RANGE: "A1:AB50"
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

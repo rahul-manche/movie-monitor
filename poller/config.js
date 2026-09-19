@@ -23,8 +23,9 @@ module.exports = {
     SHEET_ID: required("SHEET_ID"),
 
     // Range to read each poll. Rows 2+ are watch-list entries.
-    // Column Y holds the optional per-row notifyEveryMinutes override.
-    SHEET_RANGE: process.env.SHEET_RANGE || "A1:Y50",
+    // Column Y  = per-row notifyEveryMinutes override.
+    // Columns Z/AA = theatre-watch inputs; AB = theatre-watch state.
+    SHEET_RANGE: process.env.SHEET_RANGE || "A1:AB50",
 
     // Google service-account credentials. Provide EITHER:
     //  - GOOGLE_KEY_FILE: path to the JSON key file (server/VM), or
@@ -55,6 +56,19 @@ module.exports = {
     // notifyCount cap and autoDisable. Expect ~one message per poll
     // per open movie (e.g. every 10 min) until you disable the row.
     NOTIFY_EVERY_TIME:
-        String(process.env.NOTIFY_EVERY_TIME || "").toLowerCase() === "true"
+        String(process.env.NOTIFY_EVERY_TIME || "").toLowerCase() === "true",
+
+    // City segment used to build cinema (theatre-watch) URLs, e.g. "HYD".
+    THEATRE_CITY: process.env.THEATRE_CITY || "HYD",
+
+    // Send a generic "monitor alive" heartbeat at most this often, in
+    // minutes (0 disables). Confirms the pipeline (sheet + BMS) is working
+    // even when nothing has released. Throttled via HEARTBEAT_CELL.
+    HEARTBEAT_EVERY_MINUTES:
+        Number(process.env.HEARTBEAT_EVERY_MINUTES || 60),
+
+    // Scratch cell (outside the watch-list range) holding the last
+    // heartbeat's ISO timestamp.
+    HEARTBEAT_CELL: process.env.HEARTBEAT_CELL || "AD1"
 
 };

@@ -13,10 +13,16 @@
 // it alive). Reuses the existing Playwright scraper directly.
 
 const config = require("./config");
-const { readWatchlist, writeRowState, setEnabled } = require("./sheets");
+const {
+    readWatchlist, writeRowState, setEnabled, readCell, writeCell
+} = require("./sheets");
 const { sendMessage } = require("./telegram");
 const { COL, isTrue, cell, computeRow } = require("./logic");
-const { scrapeMovie } = require("../scraper");
+const { scrapeMovie, scrapeCinema } = require("../scraper");
+const {
+    parseCodes, parseDates, etCodeFromUrl,
+    buildTheatreMessage, parseState, shouldNotifyCombo
+} = require("./theatres");
 const { closeBrowser } = require("../browser");
 
 function log(...args) {
@@ -72,6 +78,133 @@ async function processRow(rows, index) {
     }
 }
 
+/**
+ * Theatre-watch: for a row with watchTheatres (Z) + watchDates (AA),
+ * check each theatre×date on the cinema page for this row's movie
+ * (matched by its ET code). On a hit, send one Telegram per theatre
+ * with theatre name + show times + a direct booking link, throttled
+ * per-(theatre,date) via the row's notifyEveryMinutes (Y).
+ *
+ * `acc` accumulates counts for the heartbeat.
+ */
+async function processTheatreWatch(rows, index, acc) {
+
+    const rowNumber = index + 1;
+    const row = rows[index];
+
+    const codes = parseCodes(cell(row, COL.watchTheatres));
+    const dates = parseDates(cell(row, COL.watchDates));
+    if (!codes.length || !dates.length) return;
+
+    const movie = cell(row, COL.movie) || cell(row, COL.url);
+
+    const et = etCodeFromUrl(cell(row, COL.url));
+    if (!et) {
+        log(`  ! ${movie}: no ET code in url — skipping theatre-watch`);
+        return;
+    }
+
+    const everyMin = Number(cell(row, COL.notifyEveryMinutes)) || 0;
+    const state = parseState(cell(row, COL.theatreState));
+    let changed = false;
+
+    for (const code of codes) {
+        for (const date of dates) {
+
+            acc.theatreChecks++;
+
+            let res;
+            try {
+                res = await scrapeCinema(
+                    config.THEATRE_CITY, code, date.ymd, et
+                );
+            } catch (err) {
+                log(`  ! ${movie} @ ${code} ${date.display}: ${err.message}`);
+                continue;
+            }
+
+            if (!res.playing) {
+                log(`  · ${movie} @ ${code} ${date.display}: not listed yet`);
+                continue;
+            }
+
+            acc.found = true;
+            const key = `${code}|${date.ymd}`;
+
+            if (!shouldNotifyCombo(state, key, everyMin)) {
+                log(`  · ${movie} @ ${code} ${date.display}: found, throttled`);
+                continue;
+            }
+
+            const msg = buildTheatreMessage(
+                movie, res.theatreName, date.display, res.times, res.url
+            );
+            try {
+                await sendMessage(msg);
+                state[key] = new Date().toISOString();
+                changed = true;
+                log(`  ✓ ${movie} @ ${res.theatreName} ${date.display}: notified`);
+            } catch (err) {
+                log(`  ! ${movie} @ ${code}: telegram failed — ${err.message}`);
+            }
+        }
+    }
+
+    if (changed) {
+        try {
+            await writeCell(`AB${rowNumber}`, JSON.stringify(state));
+        } catch (err) {
+            log(`  ! ${movie}: theatreState write failed — ${err.message}`);
+        }
+    }
+}
+
+/**
+ * Send a generic "monitor alive" heartbeat, at most once per
+ * HEARTBEAT_EVERY_MINUTES. The last-sent time lives in HEARTBEAT_CELL.
+ */
+async function maybeHeartbeat(acc) {
+
+    const every = config.HEARTBEAT_EVERY_MINUTES;
+    if (!every || every <= 0) return;
+
+    let last;
+    try {
+        last = await readCell(config.HEARTBEAT_CELL);
+    } catch (err) {
+        log(`heartbeat read failed — ${err.message}`);
+        return;
+    }
+
+    const lastMs = Date.parse(last);
+    const elapsedMin = isNaN(lastMs) ? Infinity : (Date.now() - lastMs) / 60000;
+    if (elapsedMin < every) return;
+
+    const when = new Intl.DateTimeFormat("en-GB", {
+        timeZone: config.DISPLAY_TIMEZONE,
+        day: "2-digit", month: "short",
+        hour: "2-digit", minute: "2-digit", hour12: false
+    }).format(new Date());
+
+    const status = acc.found
+        ? "🎟️ Something is OPEN — see the alert(s) above."
+        : "Nothing released at your theatres yet.";
+
+    const msg =
+        `✅ <b>Monitor alive</b> — ${when} IST\n` +
+        `Read sheet ✓ · opened BMS ✓ · checked ${acc.movies} movie(s)` +
+        (acc.theatreChecks ? ` and ${acc.theatreChecks} theatre-date(s)` : "") +
+        `.\n${status}`;
+
+    try {
+        await sendMessage(msg);
+        await writeCell(config.HEARTBEAT_CELL, new Date().toISOString());
+        log("  ✓ heartbeat sent");
+    } catch (err) {
+        log(`heartbeat send failed — ${err.message}`);
+    }
+}
+
 async function pollOnce() {
 
     log("Poll start");
@@ -84,6 +217,8 @@ async function pollOnce() {
         return;
     }
 
+    const acc = { movies: 0, theatreChecks: 0, found: false };
+
     // Process entries (skip header row 0) sequentially: they
     // share one Firefox instance.
     for (let i = 1; i < rows.length; i++) {
@@ -93,8 +228,12 @@ async function pollOnce() {
             log(`  · ${cell(row, COL.movie) || `row ${i + 1}`}: disabled, skipping`);
             continue;
         }
+        acc.movies++;
         await processRow(rows, i);
+        await processTheatreWatch(rows, i, acc);
     }
+
+    await maybeHeartbeat(acc);
 
     log("Poll done");
 }

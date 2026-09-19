@@ -30,7 +30,10 @@ const COL = {
     lastMessage: 21,      // V
     lastError: 22,        // W
     wantedTheatres: 23,   // X
-    notifyEveryMinutes: 24 // Y  (input: min minutes between repeat alerts)
+    notifyEveryMinutes: 24, // Y  (input: min minutes between repeat alerts)
+    watchTheatres: 25,    // Z   (input: theatre codes/URLs to watch, comma-sep)
+    watchDates: 26,       // AA  (input: dates to watch, comma-sep)
+    theatreState: 27      // AB  (state: JSON {"CODE|YYYYMMDD": lastNotifiedISO})
 };
 
 const isTrue = v => String(v || "").trim().toUpperCase() === "TRUE";
