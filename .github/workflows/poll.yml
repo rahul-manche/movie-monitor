@@ -1,10 +1,11 @@
 name: Movie Monitor poll
 
 on:
-  # Every 10 minutes. GitHub's scheduler is best-effort, so a run
-  # may land a few minutes late. Manual runs available too.
+  # Every 5 minutes (the practical floor for GitHub's scheduler).
+  # It is best-effort, so a run may still land a few minutes late.
+  # Manual runs available too.
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 # Don't let a slow run overlap the next scheduled one.
@@ -36,9 +37,8 @@ jobs:
       - name: Run one poll
         env:
           POLL_ONCE: "true"
-          NOTIFY_EVERY_TIME: "true"
           SHEET_ID: ${{ secrets.SHEET_ID }}
-          SHEET_RANGE: "A1:X50"
+          SHEET_RANGE: "A1:Y50"
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

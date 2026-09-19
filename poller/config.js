@@ -23,7 +23,8 @@ module.exports = {
     SHEET_ID: required("SHEET_ID"),
 
     // Range to read each poll. Rows 2+ are watch-list entries.
-    SHEET_RANGE: process.env.SHEET_RANGE || "A1:X50",
+    // Column Y holds the optional per-row notifyEveryMinutes override.
+    SHEET_RANGE: process.env.SHEET_RANGE || "A1:Y50",
 
     // Google service-account credentials. Provide EITHER:
     //  - GOOGLE_KEY_FILE: path to the JSON key file (server/VM), or

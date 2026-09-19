@@ -29,7 +29,8 @@ const COL = {
     lastNotification: 20, // U
     lastMessage: 21,      // V
     lastError: 22,        // W
-    wantedTheatres: 23    // X
+    wantedTheatres: 23,   // X
+    notifyEveryMinutes: 24 // Y  (input: min minutes between repeat alerts)
 };
 
 const isTrue = v => String(v || "").trim().toUpperCase() === "TRUE";
@@ -79,30 +80,48 @@ function decideNotification(row, result) {
     const newOpen = !!result.booking.open;
     const newAvail = !!result.wantedLanguage.available;
 
-    // Respect the per-row notify cap — unless NOTIFY_EVERY_TIME is on.
-    if (!config.NOTIFY_EVERY_TIME && cap > 0 && notified >= cap) {
+    // What (if anything) is this row currently in a notifiable state for?
+    // Language availability takes priority over plain booking-open.
+    let reason = null;
+    if (notifyLanguage && result.wantedLanguage.name && newOpen && newAvail) {
+        reason = "language available";
+    } else if (notifyBookingOpen && newOpen) {
+        reason = "booking opened";
+    }
+    if (!reason) {
+        return { notify: false, reason: "no transition" };
+    }
+
+    // Mode 1 — per-row interval (column Y): once the state is notifiable,
+    // re-alert every N minutes. Ignores the cap/autoDisable. Great for a
+    // heartbeat (e.g. 60) or aggressive watching (e.g. 5).
+    const everyMin = Number(cell(row, COL.notifyEveryMinutes)) || 0;
+    if (everyMin > 0) {
+        const last = Date.parse(cell(row, COL.lastNotification));
+        const elapsedMin = isNaN(last) ? Infinity : (Date.now() - last) / 60000;
+        return elapsedMin >= everyMin
+            ? { notify: true, reason }
+            : { notify: false, reason: "interval not elapsed" };
+    }
+
+    // Mode 2 — global NOTIFY_EVERY_TIME: alert on every poll while notifiable.
+    if (config.NOTIFY_EVERY_TIME) {
+        return { notify: true, reason };
+    }
+
+    // Mode 3 — default: FALSE→TRUE transition only, honouring the cap.
+    if (cap > 0 && notified >= cap) {
         return { notify: false, reason: "cap reached" };
     }
-
-    // Language-availability takes priority when watched. Fire on every
-    // poll while available (NOTIFY_EVERY_TIME) or on the FALSE→TRUE edge.
-    if (notifyLanguage && result.wantedLanguage.name) {
-        const was = prevOpen && prevAvail;
-        const now = newOpen && newAvail;
-        if (now && (config.NOTIFY_EVERY_TIME || !was)) {
-            return {
-                notify: true,
-                reason: "language available"
-            };
-        }
+    if (reason === "language available") {
+        return (prevOpen && prevAvail)
+            ? { notify: false, reason: "no transition" }
+            : { notify: true, reason };
     }
-
-    // Booking-open: every poll while open (NOTIFY_EVERY_TIME) or the edge.
-    if (notifyBookingOpen && newOpen && (config.NOTIFY_EVERY_TIME || !prevOpen)) {
-        return { notify: true, reason: "booking opened" };
-    }
-
-    return { notify: false, reason: "no transition" };
+    // booking opened
+    return prevOpen
+        ? { notify: false, reason: "no transition" }
+        : { notify: true, reason };
 }
 
 /**
@@ -178,10 +197,14 @@ function computeRow(row, result, { error = null } = {}) {
     const prevNotified = Number(cell(row, COL.notified)) || 0;
     const cap = Number(cell(row, COL.notifyCount)) || 0;
 
+    const everyMin = Number(cell(row, COL.notifyEveryMinutes)) || 0;
     const notified = prevNotified + (notify ? 1 : 0);
     const hitCap = cap > 0 && notified >= cap;
+    // Interval mode and global every-time both mean "keep alerting", so the
+    // cap-based autoDisable must not kick in for those.
     const autoDisable =
-        !config.NOTIFY_EVERY_TIME && hitCap && isTrue(cell(row, COL.autoDisable));
+        !config.NOTIFY_EVERY_TIME && everyMin <= 0 &&
+        hitCap && isTrue(cell(row, COL.autoDisable));
 
     // Preserve prior values for cells we don't recompute this run.
     const lastChanged = changed
