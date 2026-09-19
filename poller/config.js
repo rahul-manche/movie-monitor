@@ -67,8 +67,9 @@ module.exports = {
     HEARTBEAT_EVERY_MINUTES:
         Number(process.env.HEARTBEAT_EVERY_MINUTES || 60),
 
-    // Scratch cell (outside the watch-list range) holding the last
-    // heartbeat's ISO timestamp.
-    HEARTBEAT_CELL: process.env.HEARTBEAT_CELL || "AD1"
+    // Scratch cell holding the last heartbeat's ISO timestamp. Must be
+    // OUTSIDE the watch-list range (A..Y) but INSIDE the sheet grid
+    // (currently 28 cols, so AA/AB are safe; AD would exceed the grid).
+    HEARTBEAT_CELL: process.env.HEARTBEAT_CELL || "AA1"
 
 };
