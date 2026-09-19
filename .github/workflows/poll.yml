@@ -1,0 +1,45 @@
+name: Movie Monitor poll
+
+on:
+  # Every 10 minutes. GitHub's scheduler is best-effort, so a run
+  # may land a few minutes late. Manual runs available too.
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+# Don't let a slow run overlap the next scheduled one.
+concurrency:
+  group: movie-monitor-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: |
+          # The npm that ships with Node 22 on the runner can crash
+          # with "Exit handler never called!"; a current npm fixes it.
+          npm install -g npm@latest
+          npm install --omit=dev --no-audit --no-fund
+
+      - name: Install Playwright Firefox
+        run: npx playwright install --with-deps firefox
+
+      - name: Run one poll
+        env:
+          POLL_ONCE: "true"
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          SHEET_RANGE: "A1:X50"
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISPLAY_TIMEZONE: "Asia/Kolkata"
+        run: node poller/index.js

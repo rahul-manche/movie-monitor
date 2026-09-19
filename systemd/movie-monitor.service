@@ -1,0 +1,23 @@
+[Unit]
+Description=Movie Monitor API
+After=network.target
+
+[Service]
+Type=simple
+
+User=root
+WorkingDirectory=/opt/movie-monitor
+
+ExecStart=/usr/bin/node /opt/movie-monitor/server.js
+
+Restart=always
+RestartSec=5
+
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+[Unit]
+Description=Movie Monitor Poller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+User=movie
+WorkingDirectory=/opt/movie-monitor
+
+# Loads SHEET_ID, GOOGLE_KEY_FILE, TELEGRAM_* etc.
+EnvironmentFile=/opt/movie-monitor/.env
+
+ExecStart=/usr/bin/node /opt/movie-monitor/poller/index.js
+
+Restart=always
+RestartSec=15
+
+Environment=NODE_ENV=production
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

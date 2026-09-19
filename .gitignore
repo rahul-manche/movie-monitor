@@ -1,0 +1,11 @@
+node_modules/
+.cache/
+*.log
+/tmp/
+.DS_Store
+
+# Secrets — never commit these. On GitHub they live in repo Secrets.
+.env
+service-account.json
+*service-account*.json
+gcp-*.json
